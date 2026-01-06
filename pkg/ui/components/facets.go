@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 
 	"github.com/charmbracelet/lipgloss"
 )

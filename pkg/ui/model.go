@@ -3,8 +3,8 @@ package ui
 import (
 	"fmt"
 
-	"beats_viewer/pkg/loader"
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/loader"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/list"

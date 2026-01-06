@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

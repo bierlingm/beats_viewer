@@ -1,8 +1,8 @@
 package views
 
 import (
-	"beats_viewer/pkg/model"
-	"beats_viewer/pkg/timeline"
+	"github.com/bierlingm/beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/timeline"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

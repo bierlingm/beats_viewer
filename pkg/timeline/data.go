@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 )
 
 type ZoomLevel int

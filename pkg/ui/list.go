@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

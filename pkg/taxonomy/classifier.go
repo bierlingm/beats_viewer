@@ -3,7 +3,7 @@ package taxonomy
 import (
 	"strings"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 )
 
 // Classify auto-classifies a beat by Channel and Source

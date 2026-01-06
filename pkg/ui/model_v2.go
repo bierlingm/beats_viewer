@@ -7,12 +7,12 @@ import (
 	"sort"
 	"time"
 
-	"beats_viewer/pkg/chain"
-	"beats_viewer/pkg/cluster"
-	"beats_viewer/pkg/loader"
-	"beats_viewer/pkg/model"
-	"beats_viewer/pkg/ui/components"
-	"beats_viewer/pkg/ui/views"
+	"github.com/bierlingm/beats_viewer/pkg/chain"
+	"github.com/bierlingm/beats_viewer/pkg/cluster"
+	"github.com/bierlingm/beats_viewer/pkg/loader"
+	"github.com/bierlingm/beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/ui/components"
+	"github.com/bierlingm/beats_viewer/pkg/ui/views"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/list"

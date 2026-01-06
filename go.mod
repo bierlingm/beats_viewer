@@ -1,4 +1,4 @@
-module beats_viewer
+module github.com/bierlingm/beats_viewer
 
 go 1.22
 

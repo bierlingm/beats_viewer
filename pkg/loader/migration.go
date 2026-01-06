@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"beats_viewer/pkg/entity"
-	"beats_viewer/pkg/model"
-	"beats_viewer/pkg/ripeness"
-	"beats_viewer/pkg/taxonomy"
+	"github.com/bierlingm/beats_viewer/pkg/entity"
+	"github.com/bierlingm/beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/ripeness"
+	"github.com/bierlingm/beats_viewer/pkg/taxonomy"
 )
 
 // MigrateToV02 performs first-run enrichment to build the cache

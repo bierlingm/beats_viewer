@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 )
 
 // LoadCache reads the cache file from the beats directory

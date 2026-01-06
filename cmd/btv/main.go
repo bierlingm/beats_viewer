@@ -9,13 +9,13 @@ import (
 	"strconv"
 	"time"
 
-	"beats_viewer/pkg/cluster"
-	"beats_viewer/pkg/loader"
-	"beats_viewer/pkg/model"
-	"beats_viewer/pkg/ripeness"
-	"beats_viewer/pkg/timeline"
-	"beats_viewer/pkg/ui"
-	"beats_viewer/pkg/ui/views"
+	"github.com/bierlingm/beats_viewer/pkg/cluster"
+	"github.com/bierlingm/beats_viewer/pkg/loader"
+	"github.com/bierlingm/beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/ripeness"
+	"github.com/bierlingm/beats_viewer/pkg/timeline"
+	"github.com/bierlingm/beats_viewer/pkg/ui"
+	"github.com/bierlingm/beats_viewer/pkg/ui/views"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -133,7 +133,7 @@ USAGE:
   btv [options]
 
 OPTIONS:
-  --root <path>       Root directory for beats discovery (default: ~/werk)
+  --root <path>       Root directory for beats discovery (default: current dir)
   --rebuild-cache     Force rebuild of btv cache
   -v, --version       Show version
   -h, --help          Show this help

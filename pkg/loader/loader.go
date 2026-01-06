@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 )
 
 const (
@@ -165,11 +165,8 @@ func GetDefaultRoot() string {
 	if root := os.Getenv("BEATS_ROOT"); root != "" {
 		return root
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "."
-	}
-	return filepath.Join(home, "werk")
+	// Default to current directory - walks up to find .beats
+	return "."
 }
 
 func FindBeatByID(beats []model.Beat, id string) *model.Beat {

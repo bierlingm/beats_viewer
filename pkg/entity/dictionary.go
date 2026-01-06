@@ -1,11 +1,11 @@
 package entity
 
-import "beats_viewer/pkg/model"
+import "github.com/bierlingm/beats_viewer/pkg/model"
 
-// Known people dictionary
+// Known people dictionary - common tech/startup figures
 var KnownPeople = []string{
-	"Nick", "DHH", "Claude", "Moritz", "David", "Simon",
-	"Paul Graham", "Patrick Collison", "Elon", "Sam Altman",
+	"DHH", "Claude", "David", "Simon",
+	"Paul Graham", "Patrick Collison", "Sam Altman",
 }
 
 // Known tools dictionary

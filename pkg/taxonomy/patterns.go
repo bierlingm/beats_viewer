@@ -1,6 +1,6 @@
 package taxonomy
 
-import "beats_viewer/pkg/model"
+import "github.com/bierlingm/beats_viewer/pkg/model"
 
 // ChannelPatterns maps channels to detection patterns
 var ChannelPatterns = map[model.Channel][]string{

@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"beats_viewer/pkg/model"
+	"github.com/bierlingm/beats_viewer/pkg/model"
 )
 
 var capitalizedNamePattern = regexp.MustCompile(`\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b`)

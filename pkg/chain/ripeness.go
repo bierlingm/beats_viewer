@@ -1,6 +1,6 @@
 package chain
 
-import "beats_viewer/pkg/model"
+import "github.com/bierlingm/beats_viewer/pkg/model"
 
 func CalculateRipeness(chain *model.Chain, ripenessScores map[string]float64) float64 {
 	if len(chain.BeatIDs) == 0 {
