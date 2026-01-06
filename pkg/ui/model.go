@@ -263,26 +263,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
+	prevIdx := m.list.Index()
 	m.list, cmd = m.list.Update(msg)
+	if m.list.Index() != prevIdx {
+		m.updateSelectedBeat()
+	}
 	return m, cmd
 }
 
 func (m *Model) updateLayout() {
 	headerHeight := 2
-	footerHeight := 2
+	footerHeight := 1
 	contentHeight := m.height - headerHeight - footerHeight
+	if contentHeight < 5 {
+		contentHeight = 5
+	}
 
 	if m.width >= SplitViewThreshold {
 		listWidth := m.width / 2
-		detailWidth := m.width - listWidth - 1
+		detailWidth := m.width - listWidth - 2
 		m.list.SetSize(listWidth, contentHeight)
-		m.detail.SetSize(detailWidth, contentHeight)
-		delegate := NewBeatDelegate().SetWidth(listWidth)
+		m.detail.SetSize(detailWidth, contentHeight-2)
+		delegate := NewBeatDelegate().SetWidth(listWidth - 2)
 		m.list.SetDelegate(delegate)
 	} else {
 		m.list.SetSize(m.width, contentHeight)
 		m.detail.SetSize(m.width, contentHeight)
-		delegate := NewBeatDelegate().SetWidth(m.width)
+		delegate := NewBeatDelegate().SetWidth(m.width - 2)
 		m.list.SetDelegate(delegate)
 	}
 
@@ -328,13 +335,18 @@ func (m Model) View() string {
 	header := m.renderHeader()
 	footer := m.renderFooter()
 
+	contentHeight := m.height - 3
+	if contentHeight < 5 {
+		contentHeight = 5
+	}
+
 	var content string
 	if m.width >= SplitViewThreshold {
 		listView := m.list.View()
 		detailView := m.detail.View()
 
-		listStyle := lipgloss.NewStyle().Width(m.width / 2)
-		detailStyle := lipgloss.NewStyle().Width(m.width - m.width/2 - 1).BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#383838"))
+		listStyle := lipgloss.NewStyle().Width(m.width / 2).MaxHeight(contentHeight)
+		detailStyle := lipgloss.NewStyle().Width(m.width - m.width/2 - 2).MaxHeight(contentHeight).BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#383838"))
 
 		if m.focus == focusList {
 			listStyle = listStyle.BorderForeground(lipgloss.Color("#7D56F4"))
@@ -384,43 +396,58 @@ func (m Model) renderHeader() string {
 }
 
 func (m Model) renderFooter() string {
-	help := HelpStyle.Render("j/k:nav  /:search  p:project  a:all  enter:detail  y:yank  ?:help  q:quit")
-
-	if m.statusMsg != "" {
-		return lipgloss.JoinHorizontal(lipgloss.Center, help, "  ", SubtitleStyle.Render(m.statusMsg))
+	focusIndicator := ""
+	if m.focus == focusDetail {
+		focusIndicator = StatusBarStyle.Render(" DETAIL ") + " "
 	}
 
-	return help
+	help := "j/k:nav /:search p:proj a:all tab:focus y:copy ?:help q:quit"
+	if m.width < 80 {
+		help = "j/k /search p a tab y ? q"
+	}
+
+	status := ""
+	if m.statusMsg != "" {
+		maxStatusLen := m.width - lipgloss.Width(help) - lipgloss.Width(focusIndicator) - 4
+		if maxStatusLen > 10 {
+			status = Truncate(m.statusMsg, maxStatusLen)
+		}
+	}
+
+	left := focusIndicator + HelpStyle.Render(help)
+	if status != "" {
+		return lipgloss.JoinHorizontal(lipgloss.Center, left, "  ", SubtitleStyle.Render(status))
+	}
+	return left
 }
 
 func (m Model) renderHelp() string {
-	helpText := `
-beats_viewer (btv) - TUI for browsing beats
+	helpText := `beats_viewer (btv) - TUI for browsing beats
 
 NAVIGATION
   j/↓         Next beat
   k/↑         Previous beat
+  ←/→         Page through list
   g           Go to first beat
   G           Go to last beat
-  Enter/Tab   Toggle list/detail focus
-  Ctrl+d/u    Page down/up in detail
+  Tab/Enter   Switch focus between list and detail
+  Ctrl+d/u    Page down/up in detail view
 
 SEARCH & FILTER
-  /           Start search
+  /           Start search (filters beats in real-time)
   Esc         Clear search / cancel
   p           Cycle through projects
   a           Toggle all-projects mode
-  r           Refresh beats
+  r           Refresh beats from disk
 
-ACTIONS
-  y           Copy beat ID to clipboard
-  Y           Copy beat content to clipboard
+COPY TO CLIPBOARD
+  y           Copy beat ID (e.g. "beat-20251204-001")
+  Y           Copy full beat content
 
 OTHER
   ?           Toggle this help
   q/Ctrl+c    Quit
 
-Press any key to close help...
-`
-	return lipgloss.NewStyle().Padding(2).Render(helpText)
+Press any key to close...`
+	return lipgloss.NewStyle().Padding(1, 2).Render(helpText)
 }
