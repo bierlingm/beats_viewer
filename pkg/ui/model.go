@@ -14,6 +14,12 @@ import (
 
 const (
 	SplitViewThreshold = 80
+
+	// Responsive breakpoints
+	WidthCompact   = 60  // Single column, no sidebars
+	WidthNormal    = 100 // List + detail
+	WidthWide      = 140 // List + detail + one sidebar
+	WidthUltraWide = 180 // All panels
 )
 
 type focus int
@@ -27,11 +33,13 @@ const (
 )
 
 type Model struct {
-	beats         []model.Beat
-	beatToProject map[string]string
-	projects      []model.Project
-	currentProj   int
-	allProjects   bool
+	beats          []model.Beat
+	enrichedBeats  []model.EnrichedBeat
+	cache          *model.Cache
+	beatToProject  map[string]string
+	projects       []model.Project
+	currentProj    int
+	allProjects    bool
 
 	list       list.Model
 	detail     DetailView
@@ -68,6 +76,8 @@ func NewModel(rootPath string) Model {
 
 type beatsLoadedMsg struct {
 	beats         []model.Beat
+	enrichedBeats []model.EnrichedBeat
+	cache         *model.Cache
 	beatToProject map[string]string
 	projects      []model.Project
 	err           error
@@ -82,8 +92,21 @@ func (m Model) loadBeatsCmd() tea.Cmd {
 
 		if m.allProjects || m.currentProj < 0 {
 			beats, beatToProject, err := loader.LoadAllBeats(m.rootPath)
+			if err != nil {
+				return beatsLoadedMsg{err: err, projects: projects}
+			}
+			
+			// Try to load enriched data from first project with beats
+			var enrichedBeats []model.EnrichedBeat
+			var cache *model.Cache
+			if len(projects) > 0 {
+				enrichedBeats, cache, _ = loader.LoadEnrichedBeats(projects[0].Path, nil)
+			}
+			
 			return beatsLoadedMsg{
 				beats:         beats,
+				enrichedBeats: enrichedBeats,
+				cache:         cache,
 				beatToProject: beatToProject,
 				projects:      projects,
 				err:           err,
@@ -91,13 +114,17 @@ func (m Model) loadBeatsCmd() tea.Cmd {
 		}
 
 		if m.currentProj >= 0 && m.currentProj < len(projects) {
-			beats, err := loader.LoadBeats(projects[m.currentProj].Path)
+			enrichedBeats, cache, err := loader.LoadEnrichedBeats(projects[m.currentProj].Path, nil)
 			beatToProject := make(map[string]string)
-			for _, b := range beats {
-				beatToProject[b.ID] = projects[m.currentProj].Name
+			var beats []model.Beat
+			for _, eb := range enrichedBeats {
+				beats = append(beats, eb.Beat)
+				beatToProject[eb.ID] = projects[m.currentProj].Name
 			}
 			return beatsLoadedMsg{
 				beats:         beats,
+				enrichedBeats: enrichedBeats,
+				cache:         cache,
 				beatToProject: beatToProject,
 				projects:      projects,
 				err:           err,
@@ -126,13 +153,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.beats = msg.beats
+		m.enrichedBeats = msg.enrichedBeats
+		m.cache = msg.cache
 		m.beatToProject = msg.beatToProject
 		m.projects = msg.projects
 		m.updateList()
 		if len(m.beats) > 0 {
 			m.updateSelectedBeat()
 		}
-		m.statusMsg = fmt.Sprintf("Loaded %d beats from %d projects", len(m.beats), len(m.projects))
+		cacheStatus := ""
+		if m.cache != nil {
+			cacheStatus = " (cache loaded)"
+		}
+		m.statusMsg = fmt.Sprintf("Loaded %d beats from %d projects%s", len(m.beats), len(m.projects), cacheStatus)
 		return m, nil
 
 	case tea.KeyMsg:
