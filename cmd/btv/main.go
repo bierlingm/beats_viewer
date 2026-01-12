@@ -658,6 +658,13 @@ func robotCluster() {
 	cache.Clusters = clusters
 	cache.EmbeddingsAvailable = true
 
+	// Persist clusters to cache
+	rootPath := loader.GetDefaultRoot()
+	projects, _ := loader.DiscoverProjects(rootPath)
+	if len(projects) > 0 {
+		loader.SaveCache(projects[0].Path, cache)
+	}
+
 	var result []map[string]interface{}
 	for _, c := range clusters {
 		result = append(result, map[string]interface{}{

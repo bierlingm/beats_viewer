@@ -180,9 +180,17 @@ func MigrateToV03(beatsDir string, progressFn func(step string, current, total i
 	cache.Ripeness = ripeness.CalculateAll(beats, cache.ViewStats)
 	progress("Calculating ripeness", len(beats), len(beats))
 
-	cache.Clusters = []model.Cluster{}
-	cache.Chains = []model.Chain{}
-	cache.EmbeddingsAvailable = false
+	// Preserve existing clusters if available
+	existingCache, _ := LoadCache(beatsDir)
+	if existingCache != nil && len(existingCache.Clusters) > 0 {
+		cache.Clusters = existingCache.Clusters
+		cache.EmbeddingsAvailable = existingCache.EmbeddingsAvailable
+		cache.Chains = existingCache.Chains
+	} else {
+		cache.Clusters = []model.Cluster{}
+		cache.Chains = []model.Chain{}
+		cache.EmbeddingsAvailable = false
+	}
 
 	// v0.3 attention analysis
 	progress("Computing attention", 0, 1)
