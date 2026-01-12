@@ -7,8 +7,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/bierlingm/beats_viewer/pkg/attention"
 	"github.com/bierlingm/beats_viewer/pkg/chain"
 	"github.com/bierlingm/beats_viewer/pkg/cluster"
+	"github.com/bierlingm/beats_viewer/pkg/divergence"
 	"github.com/bierlingm/beats_viewer/pkg/loader"
 	"github.com/bierlingm/beats_viewer/pkg/model"
 	"github.com/bierlingm/beats_viewer/pkg/ui/components"
@@ -23,11 +25,14 @@ import (
 type ViewMode int
 
 const (
-	ViewList ViewMode = iota
+	ViewDashboard ViewMode = iota
+	ViewList
 	ViewTimeline
 	ViewClusters
 	ViewReview
 	ViewCapture
+	ViewDrift
+	ViewHeartbeat
 )
 
 type ModelV2 struct {
@@ -46,10 +51,14 @@ type ModelV2 struct {
 	search       SearchInput
 	facets       *components.FacetSidebar
 	entities     *components.EntitySidebar
-	timelineView *views.TimelineView
-	clusterView  *views.ClusterView
-	reviewView   *views.StaleReviewView
-	captureView  *views.CaptureView
+	timelineView  *views.TimelineView
+	clusterView   *views.ClusterView
+	reviewView    *views.StaleReviewView
+	captureView   *views.CaptureView
+	dashboardView *views.DashboardView
+	driftView     *views.DriftView
+	heartbeatView *views.HeartbeatView
+	alertBanner   *components.AlertBanner
 
 	chainStore    *chain.Store
 	clusterEngine *cluster.Engine
@@ -89,10 +98,14 @@ func NewModelV2(rootPath string) ModelV2 {
 		clusterView:   views.NewClusterView(80, 20),
 		reviewView:    views.NewStaleReviewView(80, 20),
 		captureView:   views.NewCaptureView(60, 15),
+		dashboardView: views.NewDashboardView(80, 20),
+		driftView:     views.NewDriftView(80, 20),
+		heartbeatView: views.NewHeartbeatView(80, 20),
+		alertBanner:   components.NewAlertBanner(80),
 		chainStore:    chain.NewStore(),
 		clusterEngine: cluster.NewEngine(),
 		focus:         focusList,
-		viewMode:      ViewList,
+		viewMode:      ViewDashboard,
 		rootPath:      rootPath,
 		allProjects:   false,
 		currentProj:   -1,
@@ -181,7 +194,11 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.timelineView.SetBeats(m.enrichedBeats)
 			m.clusterView.SetClusters(m.cache.Clusters)
 			m.clusterView.SetBeatContents(m.enrichedBeats)
+			m.alertBanner.SetAlerts(m.cache.Alerts)
 		}
+
+		// Compute attention state for dashboard
+		m.computeAttentionState()
 
 		m.updateList()
 		if len(m.beats) > 0 {
@@ -267,9 +284,17 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateLayout()
 			return m, nil
 
-		case "t":
+		case "A":
+			m.viewMode = ViewDashboard
+			return m, nil
+
+		case "L":
+			m.viewMode = ViewList
+			return m, nil
+
+		case "t", "T":
 			if m.viewMode == ViewTimeline {
-				m.viewMode = ViewList
+				m.viewMode = ViewDashboard
 			} else {
 				m.viewMode = ViewTimeline
 			}
@@ -277,9 +302,25 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "C":
 			if m.viewMode == ViewClusters {
-				m.viewMode = ViewList
+				m.viewMode = ViewDashboard
 			} else {
 				m.viewMode = ViewClusters
+			}
+			return m, nil
+
+		case "D":
+			if m.viewMode == ViewDrift {
+				m.viewMode = ViewDashboard
+			} else {
+				m.viewMode = ViewDrift
+			}
+			return m, nil
+
+		case "H":
+			if m.viewMode == ViewHeartbeat {
+				m.viewMode = ViewDashboard
+			} else {
+				m.viewMode = ViewHeartbeat
 			}
 			return m, nil
 
@@ -384,6 +425,14 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.clusterView.Update(msg)
 				return m, nil
 			}
+			if m.viewMode == ViewDashboard {
+				m.dashboardView.Update(msg)
+				return m, nil
+			}
+			if m.viewMode == ViewDrift {
+				m.driftView.Update(msg)
+				return m, nil
+			}
 			if m.focus == focusDetail {
 				m.detail.ScrollDown()
 			} else {
@@ -398,6 +447,14 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.viewMode == ViewClusters {
 				m.clusterView.Update(msg)
+				return m, nil
+			}
+			if m.viewMode == ViewDashboard {
+				m.dashboardView.Update(msg)
+				return m, nil
+			}
+			if m.viewMode == ViewDrift {
+				m.driftView.Update(msg)
 				return m, nil
 			}
 			if m.focus == focusDetail {
@@ -699,6 +756,8 @@ func (m ModelV2) View() string {
 	var mainContent string
 
 	switch m.viewMode {
+	case ViewDashboard:
+		mainContent = m.dashboardView.View()
 	case ViewTimeline:
 		mainContent = m.timelineView.View()
 	case ViewClusters:
@@ -707,6 +766,10 @@ func (m ModelV2) View() string {
 		mainContent = m.reviewView.View()
 	case ViewCapture:
 		mainContent = m.captureView.View()
+	case ViewDrift:
+		mainContent = m.driftView.View()
+	case ViewHeartbeat:
+		mainContent = m.heartbeatView.View()
 	default:
 		mainContent = m.renderListView(contentHeight)
 	}
@@ -782,12 +845,18 @@ func (m ModelV2) renderHeaderV2() string {
 
 	viewIndicator := ""
 	switch m.viewMode {
+	case ViewDashboard:
+		viewIndicator = StatusBarStyle.Render(" DASHBOARD ")
 	case ViewTimeline:
 		viewIndicator = StatusBarStyle.Render(" TIMELINE ")
 	case ViewClusters:
 		viewIndicator = StatusBarStyle.Render(" CLUSTERS ")
 	case ViewReview:
 		viewIndicator = StatusBarStyle.Render(" REVIEW ")
+	case ViewDrift:
+		viewIndicator = StatusBarStyle.Render(" DRIFT ")
+	case ViewHeartbeat:
+		viewIndicator = StatusBarStyle.Render(" HEARTBEAT ")
 	}
 
 	searchView := m.search.View()
@@ -987,4 +1056,54 @@ func (d EnrichedBeatDelegate) Render(w io.Writer, m list.Model, index int, item 
 	}
 
 	fmt.Fprintf(w, "%s\n%s\n", line1, line2)
+}
+
+// computeAttentionState computes all attention metrics for the dashboard
+func (m *ModelV2) computeAttentionState() {
+	if m.cache == nil || len(m.beats) == 0 {
+		return
+	}
+
+	clusters := m.cache.Clusters
+
+	// Compute attention state
+	state := attention.NewAttentionState()
+
+	// Activations
+	activationConfig := attention.DefaultActivationConfig()
+	state.Activations = attention.DetectActivations(m.beats, clusters, activationConfig)
+
+	// Drift
+	driftConfig := attention.DefaultDriftConfig()
+	state.DriftReport = attention.ComputeDrift(m.beats, clusters, driftConfig)
+
+	// Dormancy
+	dormancyConfig := attention.DefaultDormancyConfig()
+	state.Dormant = attention.DetectDormancy(m.beats, clusters, m.cache.Ripeness, dormancyConfig)
+
+	// Emergence
+	emergenceConfig := attention.DefaultEmergenceConfig()
+	state.Emergent = attention.DetectEmergence(m.beats, clusters, emergenceConfig)
+
+	// Heartbeat
+	heartbeatConfig := attention.DefaultHeartbeatConfig()
+	state.Heartbeat = attention.ComputeHeartbeat(m.beats, heartbeatConfig)
+
+	// Orientation
+	orientationConfig := attention.DefaultOrientationConfig()
+	state.Orientation = attention.ComputeOrientation(m.beats, clusters, state.Activations, state.DriftReport, m.cache.Ripeness, orientationConfig)
+
+	// Update views
+	m.dashboardView.SetState(state)
+	m.driftView.SetReport(state.DriftReport)
+	m.heartbeatView.SetHeartbeat(state.Heartbeat)
+
+	// Compute divergence
+	classifier := divergence.NewClassifier(divergence.DefaultClassifierConfig())
+	analyzer := divergence.NewAnalyzer(classifier, divergence.DefaultAnalyzerConfig())
+	divReport := analyzer.Analyze(m.beats, clusters)
+	m.dashboardView.SetDivergence(divReport)
+
+	// Update crystallizations if available
+	m.dashboardView.SetCrystallizations(m.cache.Crystallizations)
 }

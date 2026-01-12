@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bierlingm/beats_viewer/pkg/cluster"
+	"github.com/bierlingm/beats_viewer/pkg/divergence"
 	"github.com/bierlingm/beats_viewer/pkg/loader"
 	"github.com/bierlingm/beats_viewer/pkg/model"
 	"github.com/bierlingm/beats_viewer/pkg/ripeness"
@@ -20,7 +21,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 func main() {
 	if len(os.Args) > 1 {
@@ -103,6 +104,51 @@ func main() {
 		case "--capture":
 			runCapture()
 			return
+		case "--robot-attention":
+			robotAttention()
+			return
+		case "--robot-activating":
+			robotActivating()
+			return
+		case "--robot-drift":
+			robotDrift()
+			return
+		case "--robot-orientation":
+			robotOrientation()
+			return
+		case "--robot-heartbeat":
+			robotHeartbeat()
+			return
+		case "--robot-crystallizations":
+			robotCrystallizations()
+			return
+		case "--robot-crystallization":
+			if len(os.Args) < 3 {
+				fatal("--robot-crystallization requires a bead ID")
+			}
+			robotCrystallization(os.Args[2])
+			return
+		case "--robot-infer":
+			robotInfer()
+			return
+		case "--robot-divergence":
+			robotDivergence()
+			return
+		case "--robot-blindspots":
+			robotBlindspots()
+			return
+		case "--robot-agent-beats":
+			robotAgentBeats()
+			return
+		case "--robot-alerts":
+			robotAlerts()
+			return
+		case "--robot-dismiss":
+			if len(os.Args) < 3 {
+				fatal("--robot-dismiss requires an alert ID")
+			}
+			robotDismissAlert(os.Args[2])
+			return
 		}
 	}
 
@@ -127,43 +173,55 @@ func main() {
 }
 
 func printHelp() {
-	fmt.Print(`btv - beats_viewer v0.2 TUI
+	fmt.Print(`btv - beats_viewer v0.3 - The Attention Engine
 
-USAGE:
-  btv [options]
+USAGE:  btv [options]
 
 OPTIONS:
-  --root <path>       Root directory for beats discovery (default: current dir)
-  --rebuild-cache     Force rebuild of btv cache
+  --root <path>       Root directory (default: current)
+  --rebuild-cache     Force rebuild cache
   -v, --version       Show version
   -h, --help          Show this help
 
-ROBOT COMMANDS (JSON output for AI agents):
-  --robot-help                  Show robot command schemas
-  --robot-list                  List all beats as JSON
-  --robot-search                Search beats (reads JSON from stdin)
-  --robot-show <beat-id>        Show single beat as JSON
-  --robot-taxonomy-stats        Channel/source distribution
-  --robot-ripeness <beat-id>    Get ripeness score breakdown
-  --robot-ripe                  List ripest beats
-  --robot-stale                 List stale beats with reasons
-  --robot-entities              List all extracted entities
-  --robot-timeline              Timeline data by zoom level
-  --robot-clusters              List theme clusters
+VIEWS & KEYBINDINGS:
+  A    Attention Dashboard (default) - what's activating now
+  L    List view - all beats
+  D    Drift view - attention shifts over time
+  H    Heartbeat view - capture rhythm visualization
+  C    Cluster view - theme groupings
+  j/k  Navigate    /  Search    ?  Help    q  Quit
 
-ENVIRONMENT:
-  BEATS_ROOT        Override default root directory
+CONCEPTS:
+  Activation     Burst of related captures (3+ in 72h)
+  Drift          Topics rising/fading over time
+  Crystallization  Inferred beat->bead connections
+  Divergence     Human vs agent attention gaps
+  Dormancy       Ripe clusters without recent activity
 
-KEYBINDINGS (in TUI):
-  j/k       Navigate up/down
-  /         Search
-  f/e       Toggle facet/entity sidebar
-  t/C/S     Timeline/Cluster/Stale review views
-  R         Sort by ripeness
-  p/a       Cycle projects / All projects
-  y/Y       Copy ID/content
-  ?         Help
-  q         Quit
+ROBOT COMMANDS (JSON for agents):
+  Attention:
+    --robot-attention           Full attention state
+    --robot-activating          Current activations
+    --robot-drift --days N      Drift report (default 30)
+    --robot-orientation         Where attention points
+    --robot-heartbeat --days N  Rhythm data (default 90)
+  Inference:
+    --robot-crystallizations    All inferred connections
+    --robot-crystallization ID  Beats for specific bead
+    --robot-infer               Force inference run
+  Divergence:
+    --robot-divergence          Human vs agent comparison
+    --robot-blindspots          Agent-only topics
+    --robot-agent-beats         Agent-captured beats
+  Alerts:
+    --robot-alerts [--unseen]   Current alerts
+    --robot-dismiss <id>        Mark alert seen
+  Core (v0.2):
+    --robot-list/show/search    Beat operations
+    --robot-ripe/stale          Ripeness queries
+    --robot-clusters/entities   Analysis data
+
+Config: .beats/btv-config.yaml (thresholds, windows, patterns)
 `)
 }
 
@@ -905,4 +963,304 @@ func rebuildCache() {
 func runCapture() {
 	fmt.Println("Quick capture mode - implement with minimal TUI")
 	fmt.Println("For now, use: bt add \"your insight\"")
+}
+
+func robotAttention() {
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	state, err := loader.GetAttentionState(cache)
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+	if state == nil {
+		outputJSON(map[string]interface{}{"error": "no attention state computed"})
+		return
+	}
+
+	outputJSON(state)
+}
+
+func robotActivating() {
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	state, err := loader.GetAttentionState(cache)
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+	if state == nil || len(state.Activations) == 0 {
+		outputJSON(map[string]interface{}{"activations": []interface{}{}, "count": 0})
+		return
+	}
+
+	outputJSON(map[string]interface{}{
+		"activations": state.Activations,
+		"count":       len(state.Activations),
+		"computed_at": state.ComputedAt,
+	})
+}
+
+func robotDrift() {
+	days := 30
+	for i, arg := range os.Args {
+		if arg == "--days" && i+1 < len(os.Args) {
+			if n, err := strconv.Atoi(os.Args[i+1]); err == nil {
+				days = n
+			}
+		}
+	}
+
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	state, err := loader.GetAttentionState(cache)
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+	if state == nil || state.DriftReport == nil {
+		outputJSON(map[string]interface{}{"error": "no drift data available"})
+		return
+	}
+
+	report := state.DriftReport
+	outputJSON(map[string]interface{}{
+		"drift_report":    report,
+		"requested_days":  days,
+		"window_days":     int(report.Window.Hours() / 24),
+	})
+}
+
+func robotOrientation() {
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	state, err := loader.GetAttentionState(cache)
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+	if state == nil || state.Orientation == nil {
+		outputJSON(map[string]interface{}{"error": "no orientation data available"})
+		return
+	}
+
+	outputJSON(state.Orientation)
+}
+
+func robotHeartbeat() {
+	days := 90
+	for i, arg := range os.Args {
+		if arg == "--days" && i+1 < len(os.Args) {
+			if n, err := strconv.Atoi(os.Args[i+1]); err == nil {
+				days = n
+			}
+		}
+	}
+
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	state, err := loader.GetAttentionState(cache)
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+	if state == nil || state.Heartbeat == nil {
+		outputJSON(map[string]interface{}{"error": "no heartbeat data available"})
+		return
+	}
+
+	hb := state.Heartbeat
+	outputJSON(map[string]interface{}{
+		"heartbeat":       hb,
+		"requested_days":  days,
+		"window_days":     int(hb.Window.Hours() / 24),
+	})
+}
+
+func robotCrystallizations() {
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	outputJSON(map[string]interface{}{
+		"crystallizations": cache.Crystallizations,
+		"count":            len(cache.Crystallizations),
+	})
+}
+
+func robotCrystallization(beadID string) {
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	for _, c := range cache.Crystallizations {
+		if c.BeadID == beadID {
+			outputJSON(c)
+			return
+		}
+	}
+
+	outputJSON(map[string]interface{}{"error": "no crystallization found for bead: " + beadID})
+}
+
+func robotInfer() {
+	enriched, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	var beats []model.Beat
+	for _, eb := range enriched {
+		beats = append(beats, eb.Beat)
+	}
+
+	state := loader.ComputeAttentionState(beats, cache.Clusters, cache.Ripeness)
+
+	outputJSON(map[string]interface{}{
+		"attention_state":  state,
+		"crystallizations": cache.Crystallizations,
+		"computed_at":      time.Now(),
+	})
+}
+
+func robotDivergence() {
+	enriched, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	var beats []model.Beat
+	for _, eb := range enriched {
+		beats = append(beats, eb.Beat)
+	}
+
+	classifier := divergence.NewClassifier(divergence.DefaultClassifierConfig())
+	analyzer := divergence.NewAnalyzer(classifier, divergence.DefaultAnalyzerConfig())
+	report := analyzer.Analyze(beats, cache.Clusters)
+
+	outputJSON(report)
+}
+
+func robotBlindspots() {
+	enriched, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	var beats []model.Beat
+	for _, eb := range enriched {
+		beats = append(beats, eb.Beat)
+	}
+
+	classifier := divergence.NewClassifier(divergence.DefaultClassifierConfig())
+	analyzer := divergence.NewAnalyzer(classifier, divergence.DefaultAnalyzerConfig())
+	report := analyzer.Analyze(beats, cache.Clusters)
+
+	outputJSON(map[string]interface{}{
+		"blind_spots": report.BlindSpots,
+		"agent_only":  report.AgentOnly,
+		"count":       len(report.BlindSpots),
+	})
+}
+
+func robotAgentBeats() {
+	enriched, _, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	classifier := divergence.NewClassifier(divergence.DefaultClassifierConfig())
+
+	var agentBeats []map[string]interface{}
+	for _, eb := range enriched {
+		origin := classifier.Classify(eb.Beat)
+		if origin == divergence.OriginAgent {
+			agentBeats = append(agentBeats, map[string]interface{}{
+				"id":      eb.ID,
+				"preview": eb.ContentPreview(80),
+			})
+		}
+	}
+
+	outputJSON(map[string]interface{}{
+		"agent_beats": agentBeats,
+		"count":       len(agentBeats),
+	})
+}
+
+func robotAlerts() {
+	_, cache, err := getEnrichedBeats()
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	unseenOnly := false
+	for _, arg := range os.Args {
+		if arg == "--unseen" {
+			unseenOnly = true
+		}
+	}
+
+	var alerts []model.Alert
+	for _, a := range cache.Alerts {
+		if unseenOnly && a.SeenAt != nil {
+			continue
+		}
+		alerts = append(alerts, a)
+	}
+
+	outputJSON(map[string]interface{}{
+		"alerts":      alerts,
+		"count":       len(alerts),
+		"unseen_only": unseenOnly,
+	})
+}
+
+func robotDismissAlert(alertID string) {
+	rootPath := loader.GetDefaultRoot()
+	projects, err := loader.DiscoverProjects(rootPath)
+	if err != nil || len(projects) == 0 {
+		fatalJSON("error", "no projects found")
+	}
+
+	_, cache, err := loader.LoadEnrichedBeats(projects[0].Path, nil)
+	if err != nil {
+		fatalJSON("error", err.Error())
+	}
+
+	found := false
+	now := time.Now()
+	for i := range cache.Alerts {
+		if cache.Alerts[i].ID == alertID {
+			cache.Alerts[i].SeenAt = &now
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		fatalJSON("error", "alert not found: "+alertID)
+	}
+
+	if err := loader.SaveCache(projects[0].Path, cache); err != nil {
+		fatalJSON("error", "failed to save cache: "+err.Error())
+	}
+
+	outputJSON(map[string]interface{}{
+		"success":  true,
+		"alert_id": alertID,
+		"seen_at":  now,
+	})
 }
