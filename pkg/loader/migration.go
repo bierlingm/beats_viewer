@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bierlingm/beats_viewer/pkg/attention"
+	"github.com/bierlingm/beats_viewer/pkg/cache"
 	"github.com/bierlingm/beats_viewer/pkg/entity"
 	"github.com/bierlingm/beats_viewer/pkg/model"
 	"github.com/bierlingm/beats_viewer/pkg/ripeness"
@@ -68,16 +69,81 @@ func MigrateToV02(beatsDir string, progressFn func(step string, current, total i
 
 // EnsureCache loads existing cache or migrates to create one
 func EnsureCache(beatsDir string, progressFn func(step string, current, total int)) (*model.Cache, error) {
-	cache, needsRebuild, err := LoadOrCreateCache(beatsDir)
+	return LoadOrUpdateCache(beatsDir, false, progressFn)
+}
+
+// LoadOrUpdateCache loads cache and updates incrementally if possible
+func LoadOrUpdateCache(beatsDir string, forceRebuild bool, progressFn func(step string, current, total int)) (*model.Cache, error) {
+	progress := func(step string, current, total int) {
+		if progressFn != nil {
+			progressFn(step, current, total)
+		}
+	}
+
+	progress("Loading beats", 0, 0)
+	beats, err := LoadBeats(beatsDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("loading beats: %w", err)
 	}
 
-	if !needsRebuild && cache != nil {
-		return cache, nil
+	if forceRebuild {
+		return MigrateToV03(beatsDir, progressFn)
 	}
 
-	return MigrateToV02(beatsDir, progressFn)
+	existingCache, err := LoadCache(beatsDir)
+	if err != nil {
+		return nil, fmt.Errorf("loading cache: %w", err)
+	}
+
+	if cache.NeedsFullRebuild(existingCache, beats) {
+		return MigrateToV03(beatsDir, progressFn)
+	}
+
+	diff := cache.ComputeDiff(beats, existingCache)
+	if diff.IsEmpty() {
+		return existingCache, nil
+	}
+
+	progress("Incremental update", 0, diff.TotalChanges())
+	updated := 0
+	cache.ApplyDiff(existingCache, diff, beats, func(beatID string, beat *model.Beat) {
+		existingCache.Taxonomies[beatID] = taxonomy.Classify(*beat)
+		if existingCache.ViewStats == nil {
+			existingCache.ViewStats = make(map[string]model.ViewStat)
+		}
+		if _, ok := existingCache.ViewStats[beatID]; !ok {
+			existingCache.ViewStats[beatID] = model.ViewStat{}
+		}
+		updated++
+		progress("Incremental update", updated, diff.TotalChanges())
+	})
+
+	progress("Recalculating ripeness", 0, 1)
+	existingCache.Ripeness = ripeness.CalculateAll(beats, existingCache.ViewStats)
+	progress("Recalculating ripeness", 1, 1)
+
+	progress("Recalculating entities", 0, 1)
+	existingCache.Entities, existingCache.EntityIndex = entity.ExtractAll(beats)
+	progress("Recalculating entities", 1, 1)
+
+	progress("Computing attention", 0, 1)
+	attState := ComputeAttentionState(beats, existingCache.Clusters, existingCache.Ripeness)
+	if attJSON, err := json.Marshal(attState); err == nil {
+		existingCache.AttentionStateJSON = attJSON
+	}
+	progress("Computing attention", 1, 1)
+
+	sourceHash, _ := ComputeSourceHash(beatsDir)
+	existingCache.SourceHash = sourceHash
+	existingCache.GeneratedAt = time.Now()
+
+	progress("Saving cache", 0, 1)
+	if err := SaveCache(beatsDir, existingCache); err != nil {
+		return nil, fmt.Errorf("saving cache: %w", err)
+	}
+	progress("Saving cache", 1, 1)
+
+	return existingCache, nil
 }
 
 // LoadEnrichedBeats loads beats with their computed fields from cache
@@ -161,10 +227,11 @@ func MigrateToV03(beatsDir string, progressFn func(step string, current, total i
 	cache.SourceHash = sourceHash
 	cache.GeneratedAt = time.Now()
 
-	// v0.2 fields
+	// v0.2 fields + beat hashes for incremental updates
 	progress("Classifying taxonomies", 0, len(beats))
 	for i, beat := range beats {
 		cache.Taxonomies[beat.ID] = taxonomy.Classify(beat)
+		cache.BeatHashes[beat.ID] = model.HashBeat(beat)
 		progress("Classifying taxonomies", i+1, len(beats))
 	}
 

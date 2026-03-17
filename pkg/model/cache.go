@@ -1,6 +1,11 @@
 package model
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"time"
+)
 
 // ViewStat tracks viewing statistics for a beat
 type ViewStat struct {
@@ -56,6 +61,9 @@ type Cache struct {
 	GeneratedAt time.Time `json:"generated_at"`
 	SourceHash  string    `json:"source_hash"`
 
+	// v0.3.1 incremental update tracking
+	BeatHashes map[string]string `json:"beat_hashes,omitempty"` // beatID -> content hash
+
 	// v0.2 fields
 	Taxonomies  map[string]Taxonomy `json:"taxonomies"`
 	Entities    []Entity            `json:"entities"`
@@ -73,7 +81,7 @@ type Cache struct {
 	Alerts             []Alert                    `json:"alerts,omitempty"`
 }
 
-const CacheVersion = "0.3.0"
+const CacheVersion = "0.4.0"
 const CacheFileName = "btv-cache.json"
 
 // NewCache creates a new empty cache
@@ -81,6 +89,7 @@ func NewCache() *Cache {
 	return &Cache{
 		Version:          CacheVersion,
 		GeneratedAt:      time.Now(),
+		BeatHashes:       make(map[string]string),
 		Taxonomies:       make(map[string]Taxonomy),
 		Entities:         []Entity{},
 		EntityIndex:      make(map[string][]string),
@@ -118,6 +127,13 @@ func (c *Cache) MarkAlertSeen(id string) {
 			break
 		}
 	}
+}
+
+// HashBeat computes a content hash for a beat for change detection
+func HashBeat(b Beat) string {
+	data, _ := json.Marshal(b)
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])[:16]
 }
 
 // EnrichedBeat holds a beat with its computed fields from cache

@@ -46,11 +46,12 @@ type ModelV2 struct {
 	currentProj int
 	allProjects bool
 
-	list         list.Model
-	detail       DetailView
-	search       SearchInput
-	facets       *components.FacetSidebar
-	entities     *components.EntitySidebar
+	list          list.Model
+	detail        DetailView
+	search        SearchInput
+	facets        *components.FacetSidebar
+	entities      *components.EntitySidebar
+	projectPicker *components.ProjectPicker
 	timelineView  *views.TimelineView
 	clusterView   *views.ClusterView
 	reviewView    *views.StaleReviewView
@@ -70,7 +71,8 @@ type ModelV2 struct {
 	showFacets   bool
 	showEntities bool
 
-	sortByRipeness bool
+	sortByRipeness  bool
+	projectFilter   *string
 
 	width  int
 	height int
@@ -94,6 +96,7 @@ func NewModelV2(rootPath string) ModelV2 {
 		search:        NewSearchInput(),
 		facets:        components.NewFacetSidebar(25, 20),
 		entities:      components.NewEntitySidebar(25, 20),
+		projectPicker: components.NewProjectPicker(40, 20),
 		timelineView:  views.NewTimelineView(80, 20),
 		clusterView:   views.NewClusterView(80, 20),
 		reviewView:    views.NewStaleReviewView(80, 20),
@@ -186,6 +189,7 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cache = msg.cache
 		m.beatToProject = msg.beatToProject
 		m.projects = msg.projects
+		m.projectPicker.SetProjects(msg.projects)
 
 		if m.cache != nil {
 			m.chainStore.LoadFromCache(m.cache.Chains)
@@ -213,6 +217,34 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Handle project picker input
+		if m.projectPicker.IsVisible() {
+			switch msg.String() {
+			case "j", "down":
+				m.projectPicker.CursorDown()
+				return m, nil
+			case "k", "up":
+				m.projectPicker.CursorUp()
+				return m, nil
+			case "enter":
+				m.projectPicker.Select()
+				m.projectFilter = m.projectPicker.Selected()
+				m.focus = focusList
+				m.applyFilters()
+				if m.projectFilter != nil {
+					m.statusMsg = fmt.Sprintf("Project filter: %s", *m.projectFilter)
+				} else {
+					m.statusMsg = "Showing all projects"
+				}
+				return m, nil
+			case "esc", "q":
+				m.projectPicker.Hide()
+				m.focus = focusList
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.viewMode == ViewCapture {
 			cmd := m.captureView.Update(msg)
 			if m.captureView.IsSubmitted() || m.captureView.IsCancelled() {
@@ -374,8 +406,19 @@ func (m ModelV2) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "p":
-			m.cycleProject()
-			return m, m.loadBeatsCmd()
+			if m.projectPicker.IsVisible() {
+				return m, nil
+			}
+			m.projectPicker.Show()
+			m.focus = focusProjectPicker
+			return m, nil
+
+		case "P":
+			m.projectFilter = nil
+			m.projectPicker.ClearFilter()
+			m.applyFilters()
+			m.statusMsg = "Project filter cleared"
+			return m, nil
 
 		case "a":
 			m.allProjects = !m.allProjects
@@ -593,6 +636,11 @@ func (m *ModelV2) updateList() {
 func (m *ModelV2) applyFilters() {
 	filtered := m.enrichedBeats
 
+	// Apply project filter first
+	if m.projectFilter != nil {
+		filtered = components.FilterBeatsByProject(filtered, m.beatToProject, m.projectFilter, m.rootPath)
+	}
+
 	if q := m.search.Query(); q != "" {
 		var searchFiltered []model.EnrichedBeat
 		for _, eb := range filtered {
@@ -745,6 +793,11 @@ func (m ModelV2) View() string {
 		return m.renderHelpV2()
 	}
 
+	// Show project picker overlay
+	if m.projectPicker.IsVisible() {
+		return m.projectPicker.View()
+	}
+
 	header := m.renderHeaderV2()
 	footer := m.renderFooterV2()
 
@@ -835,7 +888,9 @@ func (m ModelV2) renderHeaderV2() string {
 	title := TitleStyle.Render("btv")
 
 	var projectInfo string
-	if m.allProjects || m.currentProj < 0 {
+	if m.projectFilter != nil {
+		projectInfo = ProjectBadgeStyle.Render("📁 " + *m.projectFilter)
+	} else if m.allProjects || m.currentProj < 0 {
 		projectInfo = ProjectBadgeStyle.Render("all projects")
 	} else if m.currentProj >= 0 && m.currentProj < len(m.projects) {
 		projectInfo = ProjectBadgeStyle.Render(m.projects[m.currentProj].Name)
@@ -878,9 +933,9 @@ func (m ModelV2) renderFooterV2() string {
 		focusIndicator = StatusBarStyle.Render(" DETAIL ") + " "
 	}
 
-	help := "j/k:nav /:search f:facets e:entities t:timeline C:clusters R:ripeness ?:help q:quit"
+	help := "j/k:nav /:search p:project P:clear f:facets t:timeline C:clusters R:ripeness ?:help q:quit"
 	if m.width < 100 {
-		help = "j/k / f e t C R ? q"
+		help = "j/k / p P f t C R ? q"
 	}
 
 	status := ""

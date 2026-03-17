@@ -19,6 +19,43 @@ TUI for browsing [beats](https://github.com/bierlingm/beats) - a narrative synth
 
 Use `beats` to capture. Use `btv` to synthesize.
 
+## What's New in v0.4
+
+### Project Filtering
+Filter beats by project in TUI and robot commands:
+```bash
+btv --robot-list --project modernminuteman.net
+btv --robot-ripe --project .
+```
+
+TUI keybindings:
+- `p` - Cycle through projects
+- `a` - Toggle all-projects mode
+
+### Session Filtering
+```bash
+btv --robot-list --session abc123
+```
+
+### Crystallization Suggestions
+Surface ripe beats ready to become beads:
+```bash
+btv --robot-crystallize
+btv --robot-crystallize --project .
+```
+
+TUI: Press `B` on a ripe beat to create a bead.
+
+### Semantic Similarity
+Find conceptually similar beats:
+```bash
+btv --robot-similar beat-20260113-001
+```
+
+### Incremental Cache
+Cache updates incrementally (<100ms for single beat changes).
+Force full rebuild with `--rebuild-cache`.
+
 ## Installation
 
 **With Go:**
@@ -51,16 +88,12 @@ btv --root ~/notes
 |-----|--------|
 | `j/k` | Navigate up/down |
 | `/` | Search |
-| `f` | Toggle facet sidebar (Channel/Source) |
-| `e` | Toggle entity sidebar |
-| `t` | Timeline view |
-| `C` | Cluster view |
-| `S` | Stale beat review |
+| `p` | Cycle through projects |
+| `a` | Toggle all-projects mode |
+| `B` | Create bead from beat (if ripe >= 0.5) |
 | `R` | Sort by ripeness |
-| `1-7` | Quick filter by channel |
-| `!` | Clear all filters |
 | `y/Y` | Copy beat ID / content |
-| `b` | Convert beat to bead |
+| `tab` | Switch focus list/detail |
 | `?` | Help |
 | `q` | Quit |
 

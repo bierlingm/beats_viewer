@@ -22,6 +22,7 @@ type Beat struct {
 	Entities    []string  `json:"entities,omitempty"`
 	References  []string  `json:"references,omitempty"`
 	LinkedBeads []string  `json:"linked_beads,omitempty"`
+	SessionID   string    `json:"session_id,omitempty"`
 }
 
 type Project struct {
