@@ -165,7 +165,17 @@ func GetDefaultRoot() string {
 	if root := os.Getenv("BEATS_ROOT"); root != "" {
 		return root
 	}
-	// Default to current directory - walks up to find .beats
+	// Walk up from cwd to find nearest ancestor containing .beats
+	cwd, err := os.Getwd()
+	if err == nil {
+		if beatsDir, err := FindBeatsDir(cwd); err == nil {
+			return filepath.Dir(beatsDir)
+		}
+	}
+	// Fall back to home directory
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
 	return "."
 }
 
@@ -176,4 +186,29 @@ func FindBeatByID(beats []model.Beat, id string) *model.Beat {
 		}
 	}
 	return nil
+}
+
+// FilterBeatsByProject filters beats by project name
+// If projectFilter is ".", uses current working directory name
+func FilterBeatsByProject(beats []model.Beat, beatToProject map[string]string, projectFilter string) []model.Beat {
+	if projectFilter == "" {
+		return beats
+	}
+
+	targetProject := projectFilter
+	if targetProject == "." {
+		// Get current directory name
+		cwd, err := os.Getwd()
+		if err == nil {
+			targetProject = filepath.Base(cwd)
+		}
+	}
+
+	var filtered []model.Beat
+	for _, b := range beats {
+		if beatToProject[b.ID] == targetProject {
+			filtered = append(filtered, b)
+		}
+	}
+	return filtered
 }
